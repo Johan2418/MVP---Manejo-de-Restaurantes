@@ -8,14 +8,18 @@
     "packages/*"
   ],
   "scripts": {
+    "build:shared": "npm run build --workspace @reservas/shared",
+    "predev:api": "npm run build:shared",
     "dev:api": "npm run start:dev --workspace api",
     "dev:web": "npm run dev --workspace web",
+    "prebuild": "npm run build:shared",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:migrate": "npm run prisma:migrate --workspace api",
     "db:generate": "npm run prisma:generate --workspace api",
+    "db:seed": "npm run prisma:seed --workspace api",
     "db:studio": "npm run prisma:studio --workspace api"
   },
   "engines": {

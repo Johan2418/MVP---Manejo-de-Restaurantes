@@ -1,9 +1,10 @@
 /**
  * @reservas/shared — Tipos y constantes de dominio compartidos entre API y Web.
  *
- * Fase 0: contiene los tipos base (multi-tenant, canales, estados de reserva) y el
- * contrato de nombres de eventos de dominio. Este contrato es la clave para que los
- * futuros agentes de IA se integren como consumidores del bus de eventos.
+ * Fase 1: enums alineados con los de Prisma (mismos valores en mayúsculas),
+ * etiquetas en español para la UI y el contrato de eventos de dominio.
+ * El contrato de eventos es la clave para que los futuros agentes de IA se
+ * integren como consumidores del bus.
  */
 
 /** Identificador de un tenant (SaaS multi-tenant). */
@@ -12,23 +13,43 @@ export type TenantId = string & { readonly __brand: 'TenantId' };
 /** Identificador de un restaurante. */
 export type RestaurantId = string & { readonly __brand: 'RestaurantId' };
 
-/** Canal por el que un cliente interactúa con el sistema. */
-export const CHANNELS = ['phone', 'sms', 'whatsapp', 'web'] as const;
+/** Canal por el que un cliente interactúa con el sistema (alineado con Prisma). */
+export const CHANNELS = ['PHONE', 'SMS', 'WHATSAPP', 'WEB'] as const;
 export type Channel = (typeof CHANNELS)[number];
 
-/** Ciclo de vida de una reserva. */
+export const CHANNEL_LABELS: Record<Channel, string> = {
+  PHONE: 'Teléfono',
+  SMS: 'SMS',
+  WHATSAPP: 'WhatsApp',
+  WEB: 'Web',
+};
+
+/** Ciclo de vida persistido de una reserva (alineado con Prisma). */
 export const RESERVATION_STATUSES = [
-  'requested',
-  'confirmed',
-  'cancelled',
-  'rescheduled',
-  'no_show',
-  'completed',
+  'REQUESTED',
+  'CONFIRMED',
+  'CANCELLED',
+  'NO_SHOW',
+  'COMPLETED',
 ] as const;
 export type ReservationStatus = (typeof RESERVATION_STATUSES)[number];
 
+export const RESERVATION_STATUS_LABELS: Record<ReservationStatus, string> = {
+  REQUESTED: 'Solicitada',
+  CONFIRMED: 'Confirmada',
+  CANCELLED: 'Cancelada',
+  NO_SHOW: 'No asistió',
+  COMPLETED: 'Completada',
+};
+
+/** Estados activos: ocupan mesa y bloquean franjas de disponibilidad. */
+export const ACTIVE_RESERVATION_STATUSES: readonly ReservationStatus[] = [
+  'REQUESTED',
+  'CONFIRMED',
+];
+
 /**
- * Contrato de eventos de dominio (Fase 0: definición).
+ * Contrato de eventos de dominio.
  * Todo canal emite estos eventos al bus; los agentes de IA del futuro serán
  * consumidores adicionales del mismo bus.
  */

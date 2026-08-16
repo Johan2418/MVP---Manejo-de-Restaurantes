@@ -1,18 +1,26 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { Tenant } from "@/lib/types";
+import type { Restaurant, Tenant } from "@/lib/types";
 
-export default function Home() {
-  const [tenants, setTenants] = useState<Tenant[]>([]);
+export default function TenantPage() {
+  const { tenantId } = useParams<{ tenantId: string }>();
+  const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
     try {
-      setTenants(await api<Tenant[]>("/tenants"));
+      const [tenants, rests] = await Promise.all([
+        api<Tenant[]>("/tenants"),
+        api<Restaurant[]>(`/tenants/${tenantId}/restaurants`),
+      ]);
+      setTenant(tenants.find((t) => t.id === tenantId) ?? null);
+      setRestaurants(rests);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -20,13 +28,16 @@ export default function Home() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [tenantId]);
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
     setError(null);
     try {
-      await api("/tenants", { method: "POST", body: JSON.stringify({ name }) });
+      await api(`/tenants/${tenantId}/restaurants`, {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
       setName("");
       await load();
     } catch (err) {
@@ -37,9 +48,17 @@ export default function Home() {
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-8">
       <header>
-        <h1 className="text-3xl font-semibold tracking-tight">Panel de reservas</h1>
+        <Link
+          href="/"
+          className="text-sm text-gray-500 underline-offset-2 hover:underline"
+        >
+          ← Tenants
+        </Link>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight">
+          {tenant?.name ?? "Restaurantes"}
+        </h1>
         <p className="mt-1 text-sm text-gray-500">
-          Elige un restaurante (tenant) para ver su agenda.
+          Selecciona un restaurante para abrir su agenda.
         </p>
       </header>
 
@@ -50,23 +69,20 @@ export default function Home() {
       )}
 
       <section className="flex flex-col gap-2">
-        {tenants.map((t) => (
+        {restaurants.map((r) => (
           <Link
-            key={t.id}
-            href={`/tenants/${t.id}`}
+            key={r.id}
+            href={`/tenants/${tenantId}/restaurants/${r.id}`}
             className="rounded-lg border border-gray-200 px-4 py-3 transition hover:border-gray-400 hover:shadow-sm"
           >
-            <span className="font-medium">{t.name}</span>
+            <span className="font-medium">{r.name}</span>
             <span className="ml-2 text-xs text-gray-500">
-              {t._count?.restaurants ?? 0} restaurante(s)
+              {r._count?.tables ?? 0} mesas · duración {r.defaultDurationMinutes} min
             </span>
           </Link>
         ))}
-        {tenants.length === 0 && (
-          <p className="text-sm text-gray-400">
-            No hay tenants. Ejecuta <code className="font-mono">npm run db:seed</code> o
-            crea uno abajo.
-          </p>
+        {restaurants.length === 0 && (
+          <p className="text-sm text-gray-400">Sin restaurantes todavía.</p>
         )}
       </section>
 
@@ -74,14 +90,14 @@ export default function Home() {
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Nombre del nuevo tenant (ej. La Terraza)"
+          placeholder="Nombre del restaurante (ej. Sucursal Centro)"
           className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-gray-500"
         />
         <button
           type="submit"
           className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700"
         >
-          Crear tenant
+          Crear restaurante
         </button>
       </form>
     </main>

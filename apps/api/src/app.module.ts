@@ -5,6 +5,11 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
+import { DomainEventsModule } from './domain-events/domain-events.module';
+import { RestaurantsModule } from './restaurants/restaurants.module';
+import { TablesModule } from './tables/tables.module';
+import { GuestsModule } from './guests/guests.module';
+import { ReservationsModule } from './reservations/reservations.module';
 
 @Module({
   imports: [
@@ -25,6 +30,11 @@ import { HealthModule } from './health/health.module';
 
     PrismaModule,
     HealthModule,
+    DomainEventsModule,
+    RestaurantsModule,
+    TablesModule,
+    GuestsModule,
+    ReservationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

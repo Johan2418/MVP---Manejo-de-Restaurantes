@@ -1,5 +1,4 @@
-// Esquema Prisma — Fase 0 (fundación multi-tenant).
-// Fase 1: se añadirán Reservation, Table, Guest, Conversation, TimeSlot...
+// Esquema Prisma — Fase 1: dominio de reservas (multi-tenant).
 //
 // Convención multi-tenant:
 // - Todo modelo de datos de negocio tiene un campo tenantId con índice.
@@ -23,23 +22,139 @@ model Tenant {
   updatedAt DateTime @updatedAt
 
   restaurants Restaurant[]
+  guests      Guest[]
+  reservations Reservation[]
 
   @@map("tenants")
 }
 
 /// Establecimiento (ubicación) dentro de un tenant.
 model Restaurant {
-  id        String   @id @default(cuid())
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id                    String   @id @default(cuid())
+  tenantId              String
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  name     String
-  timezone String   @default("America/Guayaquil")
+  name                   String
+  timezone               String   @default("America/Guayaquil")
+  defaultDurationMinutes Int      @default(90)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  tables       Table[]
+  reservations Reservation[]
+  openingHours OpeningHour[]
+
   @@unique([tenantId, name])
   @@index([tenantId])
   @@map("restaurants")
+}
+
+/// Horario de apertura por día de la semana (varias filas por día: almuerzo + cena).
+model OpeningHour {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  dayOfWeek Int // 0 = Domingo ... 6 = Sábado
+  openTime  String // "12:00" hora local
+  closeTime String // "23:00" hora local
+  enabled   Boolean  @default(true)
+
+  @@index([restaurantId])
+  @@map("opening_hours")
+}
+
+/// Mesa del restaurante.
+model Table {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  name     String // "M1", "Terraza A", "Bar 3"...
+  capacity Int
+  zone     String?
+  isActive Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reservations Reservation[]
+
+  @@unique([restaurantId, name])
+  @@index([restaurantId])
+  @@map("tables")
+}
+
+/// Cliente / comensal. Consentimiento explícito según LOPDP (Ecuador).
+model Guest {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  phone       String // E.164: +593...
+  name        String
+  email       String?
+  notes       String?
+  preferences String?
+  consent     Boolean  @default(false)
+  visits      Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reservations Reservation[]
+
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+  @@map("guests")
+}
+
+/// Reserva. Una mesa por reserva (las mesas combinables llegan en otra iteración).
+model Reservation {
+  id               String            @id @default(cuid())
+  tenantId         String
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  restaurantId     String
+  restaurant       Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  guestId          String?
+  guest            Guest?            @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  tableId          String?
+  table            Table?            @relation(fields: [tableId], references: [id], onDelete: SetNull)
+
+  startsAt         DateTime
+  durationMinutes  Int               @default(90)
+  partySize        Int
+  status           ReservationStatus @default(REQUESTED)
+  channel          Channel           @default(WEB)
+  customerNotes    String?
+  internalNotes    String?
+
+  cancelledAt DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, startsAt])
+  @@index([tenantId])
+  @@index([tableId, status])
+  @@map("reservations")
+}
+
+/// Ciclo de vida de una reserva.
+enum ReservationStatus {
+  REQUESTED
+  CONFIRMED
+  CANCELLED
+  NO_SHOW
+  COMPLETED
+}
+
+/// Canal por el que se originó la reserva.
+enum Channel {
+  PHONE
+  SMS
+  WHATSAPP
+  WEB
 }
