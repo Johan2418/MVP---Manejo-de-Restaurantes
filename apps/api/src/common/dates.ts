@@ -16,6 +16,12 @@ export function addMinutes(date: Date, minutes: number): Date {
   return new Date(date.getTime() + minutes * 60_000);
 }
 
+/** Clave "YYYY-MM-DD" en hora local de un Date. */
+export function toDateKey(date: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
+}
+
 export function endOfDay(date: Date): Date {
   return addMinutes(date, 24 * 60);
 }

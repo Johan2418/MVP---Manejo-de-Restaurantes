@@ -225,6 +225,9 @@ model Conversation {
 
   status ConversationStatus @default(OPEN)
 
+  /// Estado del chatbot (Fase 5): flujo de reserva en curso, etc.
+  metadata Json?
+
   /// Mensajes entrantes sin leer (contador para el panel).
   unread Int @default(0)
 

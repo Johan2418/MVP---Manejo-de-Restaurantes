@@ -104,7 +104,7 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
   async refreshIfExpired(
     credentials: CalendarCredentials,
   ): Promise<CalendarCredentials> {
-    if (credentials.expiresAt > Date.now() + 60_000) return credentials;
+    if ((credentials.expiresAt ?? 0) > Date.now() + 60_000) return credentials;
     if (!credentials.refreshToken) return credentials; // sin refresh: se reintentará y fallará con 401
 
     const tokens = await this.tokenRequest({
@@ -134,7 +134,7 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
       maxResults: '250',
     });
     const data = await this.calendarRequest<{ items?: GoogleEvent[] }>(
-      ctx.credentials.accessToken,
+      this.accessToken(ctx),
       `/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
     );
     return (data.items ?? []).map(this.fromGoogleEvent);
@@ -160,7 +160,7 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
     };
     if (existing?.id) {
       await this.calendarRequest(
-        ctx.credentials.accessToken,
+        this.accessToken(ctx),
         `/calendars/${encodeURIComponent(calendarId)}/events/${existing.id}`,
         'PUT',
         google,
@@ -168,7 +168,7 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
       return { ...event, id: existing.id };
     }
     const created = await this.calendarRequest<GoogleEvent>(
-      ctx.credentials.accessToken,
+      this.accessToken(ctx),
       `/calendars/${encodeURIComponent(calendarId)}/events`,
       'POST',
       google,
@@ -179,7 +179,7 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
   async deleteEvent(ctx: CalendarSyncContext, eventId: string): Promise<void> {
     const calendarId = this.calendarId(ctx);
     await this.calendarRequest(
-      ctx.credentials.accessToken,
+      this.accessToken(ctx),
       `/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`,
       'DELETE',
     );
@@ -190,6 +190,16 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
   private calendarId(ctx: CalendarSyncContext): string {
     const id = ctx.config.calendarId;
     return typeof id === 'string' && id.trim() ? id : 'primary';
+  }
+
+  private accessToken(ctx: CalendarSyncContext): string {
+    const token = ctx.credentials.accessToken;
+    if (!token) {
+      throw new ServiceUnavailableException(
+        'La integración de Google no tiene token válido. Reconecta el calendario.',
+      );
+    }
+    return token;
   }
 
   private toCredentials(tokens: TokenResponse): CalendarCredentials {

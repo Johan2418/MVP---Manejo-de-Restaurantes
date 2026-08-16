@@ -1,5 +1,5 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { Integration, IntegrationProvider, IntegrationStatus, ReservationStatus } from '@prisma/client';
+import { Integration, IntegrationStatus, ReservationStatus } from '@prisma/client';
 import { ACTIVE_RESERVATION_STATUSES } from '@reservas/shared';
 import { addMinutes, toLocalDateTime } from '../../common/dates';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -9,7 +9,7 @@ import {
   CalendarEvent,
   CalendarSyncContext,
 } from './calendar.adapter';
-import { GoogleCalendarAdapter } from './google-calendar.adapter';
+import { CalendarAdapterFactory } from './calendar-adapter.factory';
 
 /** Ventana de sincronización: desde ahora hasta N días. */
 const SYNC_HORIZON_DAYS = 45;
@@ -41,18 +41,19 @@ export class CalendarSyncService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly adapter: GoogleCalendarAdapter,
+    private readonly adapters: CalendarAdapterFactory,
     private readonly reservations: ReservationsService,
   ) {}
 
-  /** Sincroniza el restaurante con su calendario conectado (si existe). */
+  /**
+   * Sincroniza el restaurante con su calendario conectado (si existe).
+   * Busca la integración de CUALQUIER proveedor de calendario (Google/CalDAV).
+   */
   async syncRestaurant(restaurantId: string): Promise<SyncResult> {
-    const integration = await this.prisma.integration.findUnique({
+    const integration = await this.prisma.integration.findFirst({
       where: {
-        restaurantId_provider: {
-          restaurantId,
-          provider: IntegrationProvider.GOOGLE_CALENDAR,
-        },
+        restaurantId,
+        provider: { in: ['GOOGLE_CALENDAR', 'CALDAV'] },
       },
     });
     if (!integration || integration.status !== IntegrationStatus.CONNECTED) {
@@ -92,19 +93,20 @@ export class CalendarSyncService {
     const creds = integration.credentials as unknown as
       | CalendarCredentials
       | null;
-    if (!creds?.accessToken) {
+    const adapter = this.adapters.get(integration.provider);
+    if (!hasValidCredentials(integration.provider, creds)) {
       throw new ServiceUnavailableException(
         'La integración no tiene credenciales válidas. Reconecta el calendario.',
       );
     }
 
-    // Renueva el token si está por expirar y persiste el refresco.
-    const fresh = await this.adapter.refreshIfExpired(creds);
+    // Renueva el token si está por expirar (no-op en CalDAV) y persiste el refresco.
+    const fresh = await adapter.refreshIfExpired(creds!);
     const ctx: CalendarSyncContext = {
       credentials: fresh,
       config: (integration.config as Record<string, unknown>) ?? {},
     };
-    if (fresh.accessToken !== creds.accessToken) {
+    if (fresh.accessToken && fresh.accessToken !== creds!.accessToken) {
       await this.prisma.integration.update({
         where: { id: integration.id },
         data: { credentials: fresh as unknown as object },
@@ -131,12 +133,12 @@ export class CalendarSyncService {
     // --- Push: reservas confirmadas → eventos ---
     for (const r of reservations) {
       if (r.status !== ReservationStatus.CONFIRMED || !r.guestId) continue;
-      await this.adapter.upsertEvent(ctx, this.buildEvent(r, restaurant.timezone));
+      await adapter.upsertEvent(ctx, this.buildEvent(r, restaurant.timezone));
       pushed++;
     }
 
     // --- Pull: eventos del proveedor → reservas ---
-    const events = await this.adapter.listEvents(
+    const events = await adapter.listEvents(
       ctx,
       now.toISOString(),
       horizon.toISOString(),
@@ -152,7 +154,7 @@ export class CalendarSyncService {
       if (!res || !ACTIVE.includes(res.status)) {
         // Reserva cerrada o inexistente: limpiar el evento del calendario.
         if (event.id) {
-          await this.adapter.deleteEvent(ctx, event.id);
+          await adapter.deleteEvent(ctx, event.id);
           deleted++;
         }
         continue;
@@ -232,4 +234,15 @@ function parseEventDateTime(event: CalendarEvent): Date | null {
   if (!raw || !raw.includes('T')) return null;
   const date = new Date(raw);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** Valida las credenciales mínimas según el proveedor. */
+function hasValidCredentials(
+  provider: string,
+  creds: CalendarCredentials | null,
+): creds is CalendarCredentials {
+  if (!creds) return false;
+  if (provider === 'GOOGLE_CALENDAR') return Boolean(creds.accessToken);
+  if (provider === 'CALDAV') return Boolean(creds.calendarUrl);
+  return false;
 }

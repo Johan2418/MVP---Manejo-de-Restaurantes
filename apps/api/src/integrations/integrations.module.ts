@@ -4,8 +4,10 @@ import { Queue } from 'bullmq';
 import { DomainEventsModule } from '../domain-events/domain-events.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ReservationsModule } from '../reservations/reservations.module';
+import { CalendarAdapterFactory } from './calendar/calendar-adapter.factory';
 import { CalendarSyncProcessor } from './calendar/calendar-sync.processor';
 import { CalendarSyncService } from './calendar/calendar-sync.service';
+import { CalDavCalendarAdapter } from './calendar/caldav.adapter';
 import { GoogleCalendarAdapter } from './calendar/google-calendar.adapter';
 import {
   GoogleOAuthCallbackController,
@@ -27,6 +29,8 @@ const CRON_EVERY_MS = 15 * 60_000;
   providers: [
     IntegrationsService,
     GoogleCalendarAdapter,
+    CalDavCalendarAdapter,
+    CalendarAdapterFactory,
     CalendarSyncService,
     CalendarSyncProcessor,
   ],
