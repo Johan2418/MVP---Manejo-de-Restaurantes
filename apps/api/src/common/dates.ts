@@ -38,3 +38,24 @@ export function combineDateAndTime(date: Date, time: string): Date {
     minutes,
   );
 }
+
+/**
+ * Fecha/hora local "YYYY-MM-DDTHH:mm:ss" (sin offset) para una zona IANA.
+ * Se usa al crear eventos en Google Calendar junto con el campo timeZone.
+ */
+export function toLocalDateTime(date: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  // Algunos motores devuelven "24" para medianoche en hora 12:00; normalizar.
+  const hour = get('hour') === '24' ? '00' : get('hour');
+  return `${get('year')}-${get('month')}-${get('day')}T${hour}:${get('minute')}:${get('second')}`;
+}

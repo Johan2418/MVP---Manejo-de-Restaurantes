@@ -101,8 +101,8 @@ export default function AgendaPage() {
     }
   }
 
-  function timeLabel(r: Reservation): string {
-    const d = new Date(r.startsAt);
+  function timeLabel(iso: string): string {
+    const d = new Date(iso);
     return `${String(d.getHours()).padStart(2, "0")}:${String(
       d.getMinutes(),
     ).padStart(2, "0")}`;
@@ -146,6 +146,18 @@ export default function AgendaPage() {
           >
             Nueva reserva
           </button>
+          <Link
+            href={`${base}/conversaciones`}
+            className="rounded-md border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Conversaciones
+          </Link>
+          <Link
+            href={`${base}/integraciones`}
+            className="rounded-md border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Integraciones
+          </Link>
         </div>
       </header>
 
@@ -234,10 +246,13 @@ export default function AgendaPage() {
                 </span>
               </p>
               <p className="mt-0.5 text-sm text-gray-600">
-                {timeLabel(selected)} · {selected.partySize} comensales ·{" "}
+                {timeLabel(selected.startsAt)} · {selected.partySize} comensales ·{" "}
                 {RESERVATION_STATUS_LABELS[selected.status]} · vía{" "}
                 {CHANNEL_LABELS[selected.channel] ?? selected.channel}
                 {selected.customerNotes ? ` · ${selected.customerNotes}` : ""}
+                {selected.reminderSentAt
+                  ? ` · Recordatorio enviado ${timeLabel(selected.reminderSentAt)}`
+                  : ""}
               </p>
             </div>
             <div className="flex gap-2">

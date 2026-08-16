@@ -48,6 +48,35 @@ export const ACTIVE_RESERVATION_STATUSES: readonly ReservationStatus[] = [
   'CONFIRMED',
 ];
 
+/** Estado de un hilo de conversación (alineado con Prisma). */
+export const CONVERSATION_STATUSES = ['OPEN', 'ARCHIVED'] as const;
+export type ConversationStatus = (typeof CONVERSATION_STATUSES)[number];
+
+export const CONVERSATION_STATUS_LABELS: Record<ConversationStatus, string> = {
+  OPEN: 'Abierta',
+  ARCHIVED: 'Archivada',
+};
+
+/** Dirección de un mensaje dentro de una conversación (alineado con Prisma). */
+export const MESSAGE_DIRECTIONS = ['INBOUND', 'OUTBOUND'] as const;
+export type MessageDirection = (typeof MESSAGE_DIRECTIONS)[number];
+
+export const MESSAGE_DIRECTION_LABELS: Record<MessageDirection, string> = {
+  INBOUND: 'Recibido',
+  OUTBOUND: 'Enviado',
+};
+
+/** Estado de entrega de un mensaje (reportado por el proveedor). */
+export const MESSAGE_STATUSES = ['SENT', 'DELIVERED', 'READ', 'FAILED'] as const;
+export type MessageStatus = (typeof MESSAGE_STATUSES)[number];
+
+export const MESSAGE_STATUS_LABELS: Record<MessageStatus, string> = {
+  SENT: 'Enviado',
+  DELIVERED: 'Entregado',
+  READ: 'Leído',
+  FAILED: 'Fallido',
+};
+
 /**
  * Contrato de eventos de dominio.
  * Todo canal emite estos eventos al bus; los agentes de IA del futuro serán

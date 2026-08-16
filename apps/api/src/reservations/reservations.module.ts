@@ -9,5 +9,6 @@ import { ReservationsService } from './reservations.service';
   imports: [TablesModule, DomainEventsModule],
   controllers: [ReservationsController, AvailabilityController],
   providers: [ReservationsService],
+  exports: [ReservationsService],
 })
 export class ReservationsModule {}

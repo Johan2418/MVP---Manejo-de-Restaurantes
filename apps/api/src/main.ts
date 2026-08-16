@@ -1,5 +1,6 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import express from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -13,6 +14,9 @@ async function bootstrap() {
       transformOptions: { enableImplicitConversion: true },
     }),
   );
+
+  // Webhooks de Twilio llegan como application/x-www-form-urlencoded.
+  app.use(express.urlencoded({ extended: false }));
 
   // Todos los endpoints bajo /api (ej. /api/health)
   app.setGlobalPrefix('api');

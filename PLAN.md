@@ -98,12 +98,40 @@ Realtime) más adelante.
 | **1 — Núcleo de reservas** | Modelo de dominio, CRUD de reservas, agenda UI (día/semana, drag & drop), detección de conflictos de mesas, estados y transiciones | 2–4 semanas |
 | **2 — Canales** | IVR de llamadas (recibir llamada → opciones → reserva), SMS/WhatsApp bidireccional, webhooks → eventos de dominio, panel de conversaciones | 4–6 semanas |
 | **3 — Automatización** | Recordatorios programados (SMS/llamada N horas antes), confirmación por respuesta del cliente ("1 para confirmar"), cancelación/reprogramación por mensaje, gestión de no-shows, idempotencia y reintentos | 6–8 semanas |
-| **4 — Integraciones** | Google Calendar 2-way sync, CalDAV/Outlook, adaptador CRM (HubSpot/Zoho/propio) | 8–10 semanas |
+| **4 — Integraciones** | Google Calendar 2-way sync ✅, CalDAV/Outlook, adaptador CRM (HubSpot/Zoho/propio) | 8–10 semanas |
 | **5 — Futuro: IA y analítica** | Agente de voz (Media Streams), chatbot WhatsApp, reasignación automática de mesas, previsiones de ocupación, informe de canales | más adelante |
 
-**Estado actual: Fase 0 completada (2026-08).** Monorepo con API NestJS + web Next.js +
-Prisma/PostgreSQL + Redis/BullMQ en Docker Compose, esquema multi-tenant inicial
-(`Tenant`, `Restaurant`) y health check en `/api/health`.
+**Estado actual: Fases 1–3 completadas, Fase 4 en curso (2026-08).**
+
+- ✅ **Fase 0 — Fundación**: monorepo (NestJS + Next.js + `@reservas/shared`),
+  Prisma/PostgreSQL + Redis/BullMQ en Docker Compose, health check en `/api/health`.
+- ✅ **Fase 1 — Núcleo de reservas**: modelo de dominio multi-tenant
+  (`Tenant` → `Restaurant` → `Table`/`OpeningHour`/`Guest`/`Reservation`), CRUD de
+  reservas con detección de conflictos de mesa (409) y transiciones de estado,
+  disponibilidad por franjas, agenda diaria en la web.
+  *Pendiente menor: vista semanal y drag & drop en la agenda.*
+- ✅ **Fase 2 — Canales**: webhooks Twilio para SMS/WhatsApp y voz (IVR con menú
+  por tonos), modelo `Conversation`/`Message`, panel de conversaciones con
+  respuesta saliente, eventos `guest.replied`/`call.received`/`call.ended`.
+  *Pendiente: activar con credenciales reales de Twilio y webhooks de estado de
+  entrega.*
+- ✅ **Fase 3 — Automatización**: recordatorios programados (BullMQ,
+  `reminderHoursBefore` por restaurante) por SMS/WhatsApp o llamada IVR
+  (`reminderChannel` en el restaurante; las reservas por teléfono siempre se
+  recuerdan por llamada), confirmación/cancelación por respuesta del cliente
+  ("1"/"2" por SMS/WhatsApp y por teclas en la llamada), auto no-show /
+  auto-cancelación al final del turno, idempotencia de webhooks (`providerSid`
+  único) con reintentos y backoff exponencial, y outbox persistido de eventos.
+  *Pendiente: activar con credenciales reales de Twilio y webhooks de estado de
+  entrega de mensajería.*
+- 🔄 **Fase 4 — Integraciones (en curso)**: modelo `Integration` por restaurante
+  (credenciales OAuth en JSON privado), adaptador Google Calendar
+  (interfaz `CalendarAdapter` intercambiable), sync 2-way: reservas
+  confirmadas → eventos (upsert por `reservationId`) y cambios externos →
+  agenda (reprogramación/cancelación), limpieza de eventos huérfanos, sync por
+  eventos (BullMQ `calendar-sync`) + cron cada 15 min (Job Scheduler), OAuth
+  con refresh automático y página de integraciones en el panel.
+  *Pendiente: CalDAV/Outlook y adaptador CRM (HubSpot/Zoho/propio).*
 
 ## 6. Consideraciones operativas
 
