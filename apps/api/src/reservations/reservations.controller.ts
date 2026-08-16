@@ -67,4 +67,16 @@ export class ReservationsController {
   ) {
     return this.reservations.transition(tenantId, restaurantId, id, dto);
   }
+
+  /**
+   * POST .../reservations/auto-assign (Fase 5): asigna mesas a las reservas
+   * activas sin mesa. Se dispara solo también al confirmar/liberar mesas.
+   */
+  @Post('auto-assign')
+  autoAssign(
+    @Param('tenantId') tenantId: string,
+    @Param('restaurantId') restaurantId: string,
+  ) {
+    return this.reservations.autoAssign(tenantId, restaurantId);
+  }
 }

@@ -20,6 +20,7 @@ import {
 import { DomainEventsService } from '../domain-events/domain-events.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReservationsService } from '../reservations/reservations.service';
+import { ChatbotService } from './chatbot.service';
 import { reminderCallTwiML } from './twiml';
 import { TwilioService } from './twilio.service';
 
@@ -114,6 +115,7 @@ export class ChannelsService {
     private readonly twilio: TwilioService,
     private readonly reservations: ReservationsService,
     private readonly config: ConfigService,
+    private readonly chatbot: ChatbotService,
   ) {}
 
   // ---------- Resolución de restaurante por número Twilio ----------
@@ -194,12 +196,44 @@ export class ChannelsService {
     });
 
     // Fase 3: confirmar/cancelar reservas por mensaje ("1" / "2").
-    await this.processIntent(restaurant, guest, channel, message.body).catch(
-      (err) =>
-        this.logger.warn(
-          `Intención no aplicada (${message.body}): ${(err as Error).message}`,
-        ),
-    );
+    const intentReply = await this.processIntent(
+      restaurant,
+      guest,
+      channel,
+      message.body,
+    ).catch((err) => {
+      this.logger.warn(
+        `Intención no aplicada (${message.body}): ${(err as Error).message}`,
+      );
+      return null;
+    });
+
+    // Fase 5: si no era confirmar/cancelar, el chatbot conversacional responde.
+    if (!intentReply) {
+      const botReply = await this.chatbot
+        .handle({
+          restaurant,
+          guest,
+          conversation,
+          channel,
+          body: message.body,
+        })
+        .catch((err) => {
+          this.logger.warn(
+            `Chatbot falló (${message.body}): ${(err as Error).message}`,
+          );
+          return null;
+        });
+      if (botReply) {
+        try {
+          await this.sendToGuest(restaurant.id, guest.id, channel, botReply);
+        } catch (err) {
+          this.logger.warn(
+            `Respuesta del chatbot no enviada: ${(err as Error).message}`,
+          );
+        }
+      }
+    }
 
     return { restaurant, conversation, message };
   }

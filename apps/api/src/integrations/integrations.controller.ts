@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
@@ -7,6 +8,7 @@ import {
   Redirect,
 } from '@nestjs/common';
 import { IntegrationProvider } from '@prisma/client';
+import { ConnectCalDavDto } from './dto/connect-caldav.dto';
 import { IntegrationsService } from './integrations.service';
 
 /** Endpoints de integraciones, aislados por tenant/restaurante. */
@@ -34,7 +36,7 @@ export class IntegrationsController {
 
   /** POST .../integrations/google/disconnect — elimina la integración. */
   @Post('google/disconnect')
-  async disconnect(
+  async disconnectGoogle(
     @Param('tenantId') tenantId: string,
     @Param('restaurantId') restaurantId: string,
   ) {
@@ -42,6 +44,30 @@ export class IntegrationsController {
       tenantId,
       restaurantId,
       IntegrationProvider.GOOGLE_CALENDAR,
+    );
+    return { ok: true };
+  }
+
+  /** POST .../integrations/caldav/connect — URL + credenciales CalDAV. */
+  @Post('caldav/connect')
+  connectCalDav(
+    @Param('tenantId') tenantId: string,
+    @Param('restaurantId') restaurantId: string,
+    @Body() dto: ConnectCalDavDto,
+  ) {
+    return this.integrations.connectCalDav(tenantId, restaurantId, dto);
+  }
+
+  /** POST .../integrations/caldav/disconnect — elimina la integración. */
+  @Post('caldav/disconnect')
+  async disconnectCalDav(
+    @Param('tenantId') tenantId: string,
+    @Param('restaurantId') restaurantId: string,
+  ) {
+    await this.integrations.disconnect(
+      tenantId,
+      restaurantId,
+      IntegrationProvider.CALDAV,
     );
     return { ok: true };
   }

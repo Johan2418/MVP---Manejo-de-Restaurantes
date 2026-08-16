@@ -13,6 +13,7 @@ import { ReservationsModule } from './reservations/reservations.module';
 import { ChannelsModule } from './channels/channels.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { IntegrationsModule } from './integrations/integrations.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -43,8 +44,10 @@ import { IntegrationsModule } from './integrations/integrations.module';
     ChannelsModule,
     // Fase 3 — Automatización: recordatorios y no-shows (cola BullMQ 'reminders').
     RemindersModule,
-    // Fase 4 — Integraciones: Google Calendar 2-way sync (cola 'calendar-sync').
+    // Fase 4 — Integraciones: Google Calendar + CalDAV 2-way sync (cola 'calendar-sync').
     IntegrationsModule,
+    // Fase 5 — Analítica: previsión de ocupación e informe de canales.
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

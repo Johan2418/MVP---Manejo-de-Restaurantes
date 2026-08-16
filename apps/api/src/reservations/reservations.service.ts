@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, ReservationStatus } from '@prisma/client';
@@ -40,6 +41,8 @@ const CREATABLE_STATUSES: ReservationStatus[] = ['REQUESTED', 'CONFIRMED'];
 
 @Injectable()
 export class ReservationsService {
+  private readonly logger = new Logger(ReservationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tables: TablesService,
@@ -134,6 +137,11 @@ export class ReservationsService {
       tenantId as TenantId,
       { reservationId: reservation.id, restaurantId },
     );
+
+    // Fase 5: confirmada sin mesa → asignación automática (no rompe la creación).
+    if (status === ReservationStatus.CONFIRMED && !tableId) {
+      await this.tryAutoAssign(tenantId, restaurantId, reservation.id);
+    }
 
     return reservation;
   }
@@ -282,6 +290,24 @@ export class ReservationsService {
       });
     }
 
+    // Fase 5 — reasignación automática:
+    // - Al confirmar sin mesa → intenta asignársela ya.
+    // - Al cancelar/completar/no-show se libera una mesa → barre el
+    //   restaurante para recolocar reservas que antes no cabían.
+    if (target === ReservationStatus.CONFIRMED && !current.tableId) {
+      await this.tryAutoAssign(tenantId, restaurantId, reservationId);
+    } else if (
+      (
+        [
+          ReservationStatus.CANCELLED,
+          ReservationStatus.COMPLETED,
+          ReservationStatus.NO_SHOW,
+        ] as ReservationStatus[]
+      ).includes(target)
+    ) {
+      await this.tryAutoAssign(tenantId, restaurantId);
+    }
+
     const event =
       target === ReservationStatus.CONFIRMED
         ? DOMAIN_EVENTS.RESERVATION_CONFIRMED
@@ -295,6 +321,109 @@ export class ReservationsService {
     }
 
     return updated;
+  }
+
+  // ---------- Asignación automática de mesas (Fase 5) ----------
+
+  /**
+   * Asigna automáticamente la mesa más pequeña que quepa al grupo y esté
+   * libre en el horario de cada reserva activa sin mesa (Fase 5).
+   *
+   * Greedy por hora de inicio: procesa en orden cronológico para que las
+   * reservas más tempranas no pierdan la mesa. Si `onlyReservationId` llega,
+   * solo se intenta asignar esa reserva.
+   */
+  async autoAssign(
+    tenantId: string,
+    restaurantId: string,
+    onlyReservationId?: string,
+  ): Promise<{ assigned: number }> {
+    const restaurant = await this.prisma.restaurant.findFirst({
+      where: { id: restaurantId, tenantId },
+    });
+    if (!restaurant) {
+      throw new NotFoundException(
+        `Restaurante ${restaurantId} no encontrado en este tenant`,
+      );
+    }
+
+    const unassigned = await this.prisma.reservation.findMany({
+      where: {
+        restaurantId,
+        status: { in: ACTIVE },
+        tableId: null,
+        ...(onlyReservationId ? { id: onlyReservationId } : {}),
+      },
+      orderBy: [{ startsAt: 'asc' }, { partySize: 'desc' }],
+    });
+    if (unassigned.length === 0) return { assigned: 0 };
+
+    // Mesas activas de menor a mayor capacidad (el mejor ajuste primero).
+    const tables = await this.prisma.table.findMany({
+      where: { restaurantId, isActive: true },
+      orderBy: [{ capacity: 'asc' }, { name: 'asc' }],
+    });
+
+    // Franjas ocupadas por mesa de las reservas ya asignadas (activas).
+    const assigned = await this.prisma.reservation.findMany({
+      where: { restaurantId, status: { in: ACTIVE }, tableId: { not: null } },
+      select: { tableId: true, startsAt: true, durationMinutes: true },
+    });
+    const occupied = new Map<string, Array<[number, number]>>();
+    for (const r of assigned) {
+      if (!r.tableId) continue;
+      const list = occupied.get(r.tableId) ?? [];
+      list.push([
+        r.startsAt.getTime(),
+        r.startsAt.getTime() + r.durationMinutes * 60_000,
+      ]);
+      occupied.set(r.tableId, list);
+    }
+
+    let assignedCount = 0;
+    for (const res of unassigned) {
+      const start = res.startsAt.getTime();
+      const end = start + res.durationMinutes * 60_000;
+      const candidate = tables.find((t) => {
+        if (t.capacity < res.partySize) return false;
+        const busy = occupied.get(t.id) ?? [];
+        return !busy.some(([s, e]) => s < end && e > start);
+      });
+      if (!candidate) continue;
+      await this.prisma.reservation.update({
+        where: { id: res.id },
+        data: { tableId: candidate.id },
+      });
+      const list = occupied.get(candidate.id) ?? [];
+      list.push([start, end]);
+      occupied.set(candidate.id, list);
+      assignedCount++;
+    }
+    return { assigned: assignedCount };
+  }
+
+  /** Asignación automática con fallo silencioso (no debe romper la operación). */
+  private async tryAutoAssign(
+    tenantId: string,
+    restaurantId: string,
+    reservationId?: string,
+  ) {
+    try {
+      const { assigned } = await this.autoAssign(
+        tenantId,
+        restaurantId,
+        reservationId,
+      );
+      if (assigned > 0) {
+        this.logger.log(
+          `Auto-asignación: ${assigned} mesa(s) asignadas en ${restaurantId}`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Auto-asignación falló: ${(err as Error).message}`,
+      );
+    }
   }
 
   // ---------- Conflictos y disponibilidad ----------

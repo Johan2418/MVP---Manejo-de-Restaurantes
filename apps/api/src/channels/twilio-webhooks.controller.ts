@@ -10,6 +10,7 @@ import type { Conversation, Restaurant } from '@prisma/client';
 import type { Request } from 'express';
 import { esc, say, twiml } from './twiml';
 import { ChannelsService } from './channels.service';
+import { VoiceAiService } from './voice-ai.service';
 
 /**
  * Webhooks públicos que Twilio invoca (SMS, WhatsApp y voz).
@@ -19,7 +20,10 @@ import { ChannelsService } from './channels.service';
  */
 @Controller('channels/twilio')
 export class TwilioWebhooksController {
-  constructor(private readonly channels: ChannelsService) {}
+  constructor(
+    private readonly channels: ChannelsService,
+    private readonly voiceAi: VoiceAiService,
+  ) {}
 
   /** Webhook de mensajería (SMS y WhatsApp). Twilio espera un 2xx. */
   @Post('messages')
@@ -39,7 +43,10 @@ export class TwilioWebhooksController {
     return { ok: true, conversationId: (result.conversation as Conversation).id };
   }
 
-  /** Llamada entrante: saludo + menú IVR (Gather por tonos). */
+  /**
+   * Llamada entrante: agente de voz con IA (OpenAI Realtime vía Media Streams)
+   * si está configurado; si no, saludo + menú IVR clásico (Gather por tonos).
+   */
   @Post('voice')
   @Header('Content-Type', 'text/xml')
   async voice(@Req() req: Request, @Body() body: Record<string, any>) {
@@ -52,10 +59,20 @@ export class TwilioWebhooksController {
       return twiml(say('Lo sentimos, este número no está asociado a un restaurante.'));
     }
     const base = `${req.protocol}://${req.get('host')}`;
-    const name = (result.restaurant as Restaurant).name;
+    const restaurant = result.restaurant as Restaurant;
+
+    // Fase 5 — agente de voz con IA (requiere OPENAI_API_KEY en las API Keys).
+    if (this.voiceAi.isConfigured) {
+      return this.voiceAi.streamTwiML({
+        restaurant,
+        callSid: body.CallSid ?? '',
+        baseUrl: base,
+      });
+    }
+
     return twiml(`
       ${say(
-        `Gracias por llamar a ${name}. Presione 1 para hacer una reserva. Presione 2 para confirmar o cancelar una reserva. Presione 3 para hablar con recepción.`,
+        `Gracias por llamar a ${restaurant.name}. Presione 1 para hacer una reserva. Presione 2 para confirmar o cancelar una reserva. Presione 3 para hablar con recepción.`,
       )}
       <Gather numDigits="1" action="${esc(base)}/api/channels/twilio/voice/menu" method="POST" timeout="8" />
       ${say('No recibimos ninguna opción. Hasta luego.')}

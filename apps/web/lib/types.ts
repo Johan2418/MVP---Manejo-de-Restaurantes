@@ -82,3 +82,71 @@ export interface Integration {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface GuestSummary {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  notes: string | null;
+  preferences: string | null;
+  consent: boolean;
+  visits: number;
+  createdAt: string;
+  updatedAt: string;
+  _count: { reservations: number };
+  reservations: Array<{
+    startsAt: string;
+    status: ReservationStatus;
+  }>;
+}
+
+export interface GuestProfile extends Omit<GuestSummary, "_count" | "reservations"> {
+  reservations: Array<{
+    id: string;
+    startsAt: string;
+    durationMinutes: number;
+    partySize: number;
+    status: ReservationStatus;
+    channel: Channel;
+    customerNotes: string | null;
+    table: Table | null;
+  }>;
+  conversations: Array<{
+    id: string;
+    channel: Channel;
+    status: ConversationStatus;
+    lastMessageAt: string | null;
+    messages: Message[];
+  }>;
+}
+
+export interface AnalyticsOverview {
+  generatedAt: string;
+  capacity: number;
+  today: { count: number; covers: number };
+  upcoming: { count: number; covers: number };
+  occupancy: Array<{
+    date: string;
+    label: string;
+    count: number;
+    covers: number;
+    occupancyPct: number;
+  }>;
+  channels: Array<{
+    channel: Channel;
+    total: number;
+    requested: number;
+    confirmed: number;
+    cancelled: number;
+    noShow: number;
+    completed: number;
+    sharePct: number;
+  }>;
+  conversationsByChannel: Array<{ channel: Channel; count: number }>;
+  rates: {
+    confirmationRate: number;
+    cancellationRate: number;
+    noShowRate: number;
+  };
+}

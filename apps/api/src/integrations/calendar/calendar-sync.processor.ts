@@ -1,9 +1,10 @@
 import { Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { IntegrationProvider, IntegrationStatus } from '@prisma/client';
+import { IntegrationStatus } from '@prisma/client';
 import { Job } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CalendarSyncService } from './calendar-sync.service';
+import { CALENDAR_PROVIDERS } from './calendar.adapter';
 
 /**
  * Worker de la cola `calendar-sync` (Fase 4 — Integraciones).
@@ -51,7 +52,7 @@ export class CalendarSyncProcessor extends WorkerHost {
   private async syncAll() {
     const integrations = await this.prisma.integration.findMany({
       where: {
-        provider: IntegrationProvider.GOOGLE_CALENDAR,
+        provider: { in: [...CALENDAR_PROVIDERS] },
         status: IntegrationStatus.CONNECTED,
       },
       select: { restaurantId: true },

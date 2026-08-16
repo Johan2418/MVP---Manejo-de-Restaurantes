@@ -14,6 +14,7 @@ import { ConfigService } from '@nestjs/config';
 import { CalendarSyncService, SyncResult } from './calendar/calendar-sync.service';
 import { GoogleCalendarAdapter } from './calendar/google-calendar.adapter';
 import { PrismaService } from '../prisma/prisma.service';
+import { ConnectCalDavDto } from './dto/connect-caldav.dto';
 
 /** Delay tras un evento de reserva antes de sincronizar (espera al commit). */
 const EVENT_SYNC_DELAY_MS = 5_000;
@@ -144,6 +145,67 @@ export class IntegrationsService {
     await this.prisma.integration.deleteMany({
       where: { tenantId, restaurantId, provider },
     });
+  }
+
+  // ---------- CalDAV: conexión directa (URL + credenciales) ----------
+
+  /**
+   * Conecta un calendario CalDAV (Nextcloud, iCloud, Zimbra...). A diferencia
+   * de Google, no hay OAuth: se guardan URL + usuario/contraseña y se valida
+   * con un primer REPORT al guardar.
+   */
+  async connectCalDav(
+    tenantId: string,
+    restaurantId: string,
+    dto: ConnectCalDavDto,
+  ) {
+    await this.assertRestaurantInTenant(tenantId, restaurantId);
+    try {
+      const url = new URL(dto.url);
+      if (!['http:', 'https:'].includes(url.protocol)) {
+        throw new BadRequestException(
+          'La URL CalDAV debe usar http o https',
+        );
+      }
+    } catch {
+      throw new BadRequestException('URL CalDAV inválida');
+    }
+
+    await this.prisma.integration.upsert({
+      where: {
+        restaurantId_provider: {
+          restaurantId,
+          provider: IntegrationProvider.CALDAV,
+        },
+      },
+      update: {
+        status: IntegrationStatus.CONNECTED,
+        credentials: {
+          calendarUrl: dto.url.trim(),
+          username: dto.username?.trim() ?? '',
+          password: dto.password ?? '',
+        } as unknown as object,
+        config: {} as unknown as object,
+        lastError: null,
+      },
+      create: {
+        tenantId,
+        restaurantId,
+        provider: IntegrationProvider.CALDAV,
+        status: IntegrationStatus.CONNECTED,
+        credentials: {
+          calendarUrl: dto.url.trim(),
+          username: dto.username?.trim() ?? '',
+          password: dto.password ?? '',
+        } as unknown as object,
+        config: {} as unknown as object,
+      },
+    });
+
+    this.logger.log(`CalDAV conectado para ${restaurantId}`);
+    // Sincronización inicial (valida la conexión real contra el servidor).
+    await this.enqueueRestaurantSync(restaurantId, 0);
+    return { ok: true };
   }
 
   /** Sincronización manual (endpoint). */

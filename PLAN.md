@@ -95,21 +95,22 @@ Realtime) más adelante.
 | Fase | Alcance | Duración aprox. |
 |---|---|---|
 | **0 — Fundación** | Monorepo, NestJS + Next.js, Postgres + Prisma, Redis + BullMQ, Docker Compose, CI básico | 1–2 semanas |
-| **1 — Núcleo de reservas** | Modelo de dominio, CRUD de reservas, agenda UI (día/semana, drag & drop), detección de conflictos de mesas, estados y transiciones | 2–4 semanas |
+| **1 — Núcleo de reservas** | Modelo de dominio, CRUD de reservas, agenda UI (día/semana ✅, drag & drop ✅), detección de conflictos de mesas, estados y transiciones | 2–4 semanas |
 | **2 — Canales** | IVR de llamadas (recibir llamada → opciones → reserva), SMS/WhatsApp bidireccional, webhooks → eventos de dominio, panel de conversaciones | 4–6 semanas |
 | **3 — Automatización** | Recordatorios programados (SMS/llamada N horas antes), confirmación por respuesta del cliente ("1 para confirmar"), cancelación/reprogramación por mensaje, gestión de no-shows, idempotencia y reintentos | 6–8 semanas |
-| **4 — Integraciones** | Google Calendar 2-way sync ✅, CalDAV/Outlook, adaptador CRM (HubSpot/Zoho/propio) | 8–10 semanas |
-| **5 — Futuro: IA y analítica** | Agente de voz (Media Streams), chatbot WhatsApp, reasignación automática de mesas, previsiones de ocupación, informe de canales | más adelante |
+| **4 — Integraciones** | Google Calendar 2-way sync ✅, CalDAV ✅, CRM propio ✅ (HubSpot/Zoho quedan opcionales) | 8–10 semanas |
+| **5 — Futuro: IA y analítica** | Analítica ✅ (ocupación + canales), reasignación automática de mesas ✅, chatbot WhatsApp/SMS ✅, agente de voz (Media Streams + OpenAI Realtime) ✅ | más adelante |
 
-**Estado actual: Fases 1–3 completadas, Fase 4 en curso (2026-08).**
+**Estado actual: Fases 1–5 completadas (2026-08).**
 
 - ✅ **Fase 0 — Fundación**: monorepo (NestJS + Next.js + `@reservas/shared`),
   Prisma/PostgreSQL + Redis/BullMQ en Docker Compose, health check en `/api/health`.
 - ✅ **Fase 1 — Núcleo de reservas**: modelo de dominio multi-tenant
   (`Tenant` → `Restaurant` → `Table`/`OpeningHour`/`Guest`/`Reservation`), CRUD de
   reservas con detección de conflictos de mesa (409) y transiciones de estado,
-  disponibilidad por franjas, agenda diaria en la web.
-  *Pendiente menor: vista semanal y drag & drop en la agenda.*
+  disponibilidad por franjas, agenda en la web con vista **día** (rejilla por
+  mesa/franja) y **semana** (lunes–domingo) y **drag & drop** de reservas entre
+  mesas/franjas (los conflictos se validan en el servidor).
 - ✅ **Fase 2 — Canales**: webhooks Twilio para SMS/WhatsApp y voz (IVR con menú
   por tonos), modelo `Conversation`/`Message`, panel de conversaciones con
   respuesta saliente, eventos `guest.replied`/`call.received`/`call.ended`.
@@ -124,14 +125,36 @@ Realtime) más adelante.
   único) con reintentos y backoff exponencial, y outbox persistido de eventos.
   *Pendiente: activar con credenciales reales de Twilio y webhooks de estado de
   entrega de mensajería.*
-- 🔄 **Fase 4 — Integraciones (en curso)**: modelo `Integration` por restaurante
-  (credenciales OAuth en JSON privado), adaptador Google Calendar
-  (interfaz `CalendarAdapter` intercambiable), sync 2-way: reservas
-  confirmadas → eventos (upsert por `reservationId`) y cambios externos →
-  agenda (reprogramación/cancelación), limpieza de eventos huérfanos, sync por
-  eventos (BullMQ `calendar-sync`) + cron cada 15 min (Job Scheduler), OAuth
-  con refresh automático y página de integraciones en el panel.
-  *Pendiente: CalDAV/Outlook y adaptador CRM (HubSpot/Zoho/propio).*
+- ✅ **Fase 4 — Integraciones**: modelo `Integration` por restaurante
+  (credenciales en JSON privado, nunca expuestas), adaptadores Google Calendar
+  (OAuth2 con refresh automático) y **CalDAV** (URL + usuario/contraseña, con
+  REPORT calendar-query, PUT/DELETE e iCalendar RFC 5545) bajo la interfaz
+  intercambiable `CalendarAdapter`; sync 2-way: reservas confirmadas → eventos
+  (upsert por `reservationId` / `X-RESERVATION-ID`) y cambios externos → agenda
+  (reprogramación/cancelación), limpieza de eventos huérfanos, sync por eventos
+  (BullMQ `calendar-sync`) + cron cada 15 min (Job Scheduler); **CRM propio**:
+  perfil de comensal en `Guest` (preferencias, notas, visitas, consentimiento
+  LOPDP) con listado del restaurante y perfil con historial en el panel, bajo
+  el contrato `CrmAdapter` (HubSpot/Zoho se enchufan después).
+  *HubSpot/Zoho quedan como integración opcional futura.*
+- ✅ **Fase 5 — IA y analítica**: analítica en `.../analitica` — previsión de
+  ocupación (comensales vs. capacidad por día, próximos 14 días), informe de
+  canales (reservas por canal con desglose por estado y conversaciones,
+  últimos 30 días) y tasas de confirmación, cancelación y no-show
+  (`GET .../analytics/overview?days=14`). **Reasignación automática de mesas**:
+  al confirmar una reserva sin mesa se le asigna la mesa más pequeña libre que
+  quepa al grupo; al cancelar/completar/no-show se libera la mesa y se barre el
+  restaurante recolocando reservas activas sin mesa (greedy por hora de inicio;
+  botón "Auto-asignar" y `POST .../reservations/auto-assign`). **Chatbot
+  WhatsApp/SMS**: bot conversacional en español (saludos, horarios, flujo de
+  reserva guiado: comensales → fecha → hora → nombre) con estado persistido en
+  `Conversation.metadata`, integrado al webhook de mensajería y con el
+  confirmar/cancelar automático ya existente. **Agente de voz con IA**: puente
+  Twilio Media Streams ⇄ OpenAI Realtime (WebSocket en
+  `/api/channels/twilio/voice/ai-stream`, g711_ulaw 8 kHz, prompt del conserje
+  con los horarios reales del restaurante); sin `OPENAI_API_KEY` cae al IVR
+  clásico. *Para activar en producción: `OPENAI_API_KEY` (y las credenciales
+  Twilio ya existentes).*
 
 ## 6. Consideraciones operativas
 
@@ -162,6 +185,9 @@ Realtime) más adelante.
 
 ## 8. Decisiones pendientes
 
-- [ ] ¿CRM a integrar ya (HubSpot/Zoho) o CRM propio integrado en Guest?
+- [x] **CRM propio integrado en Guest** — resuelto en Fase 4; HubSpot/Zoho
+  quedan como integración opcional detrás del contrato `CrmAdapter`.
 - [ ] ¿Pagos en línea para garantizar reservas (depósito/adelanto) en el alcance base?
+  (Decisión de producto: implementar con Stripe/PayPal + gravity cuando se defina.)
 - [ ] ¿Despliegue inicial (Fly.io / Railway / VPS propio)?
+  (Decisión de producto/infra; el monorepo ya está listo para dockerizar.)

@@ -37,3 +37,32 @@ export class GuestsController {
     return this.guests.update(tenantId, guestId, dto);
   }
 }
+
+/**
+ * CRM propio (Fase 4): comensales con actividad en un restaurante concreto.
+ * Escopeado por restaurante para el panel; los datos viven en `Guest`.
+ */
+@Controller('tenants/:tenantId/restaurants/:restaurantId/guests')
+export class RestaurantGuestsController {
+  constructor(private readonly guests: GuestsService) {}
+
+  /** GET /api/tenants/:tenantId/restaurants/:restaurantId/guests?q=... */
+  @Get()
+  list(
+    @Param('tenantId') tenantId: string,
+    @Param('restaurantId') restaurantId: string,
+    @Query('q') q?: string,
+  ) {
+    return this.guests.listByRestaurant(tenantId, restaurantId, q);
+  }
+
+  /** GET .../guests/:guestId — perfil completo (datos + historial). */
+  @Get(':guestId')
+  profile(
+    @Param('tenantId') tenantId: string,
+    @Param('restaurantId') restaurantId: string,
+    @Param('guestId') guestId: string,
+  ) {
+    return this.guests.profile(tenantId, restaurantId, guestId);
+  }
+}

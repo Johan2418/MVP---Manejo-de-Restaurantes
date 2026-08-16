@@ -2,6 +2,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import express from 'express';
 import { AppModule } from './app.module';
+import { VoiceAiService } from './channels/voice-ai.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -31,6 +32,11 @@ async function bootstrap() {
   // NOTA: algunas máquinas tienen PORT en el entorno del sistema; validar siempre.
   const port = Number(process.env.PORT) || 3001;
   await app.listen(port);
+
+  // Fase 5 — agente de voz IA: Twilio Media Streams se conecta por WebSocket
+  // al mismo servidor HTTP (ruta /api/channels/twilio/voice/ai-stream).
+  app.get(VoiceAiService).attach(app.getHttpServer());
+
   console.log(`API escuchando en http://localhost:${port}/api`);
 }
 bootstrap();
