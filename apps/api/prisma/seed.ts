@@ -32,6 +32,8 @@ async function main() {
       name: RESTAURANT_NAME,
       timezone: 'America/Guayaquil',
       defaultDurationMinutes: 90,
+      phone: '+593222345678',
+      twilioPhoneNumber: '+593987650001',
     },
   });
 
@@ -39,6 +41,10 @@ async function main() {
   await prisma.reservation.deleteMany({ where: { restaurantId: restaurant.id } });
   await prisma.table.deleteMany({ where: { restaurantId: restaurant.id } });
   await prisma.openingHour.deleteMany({ where: { restaurantId: restaurant.id } });
+  await prisma.message.deleteMany({
+    where: { conversation: { restaurantId: restaurant.id } },
+  });
+  await prisma.conversation.deleteMany({ where: { restaurantId: restaurant.id } });
 
   // --- Mesas ---
   const tablesData = [
@@ -157,6 +163,64 @@ async function main() {
     });
   }
 
+  // --- Conversaciones demo (Fase 2 — canales) ---
+  const now = Date.now();
+  const maria = await prisma.guest.findUniqueOrThrow({
+    where: { tenantId_phone: { tenantId: tenant.id, phone: '+593991234567' } },
+  });
+  const lucia = await prisma.guest.findUniqueOrThrow({
+    where: { tenantId_phone: { tenantId: tenant.id, phone: '+593976543210' } },
+  });
+
+  const whatsappConv = await prisma.conversation.create({
+    data: {
+      tenantId: tenant.id,
+      restaurantId: restaurant.id,
+      guestId: maria.id,
+      channel: 'WHATSAPP',
+      channelAddress: restaurant.twilioPhoneNumber!,
+      peerAddress: maria.phone,
+      lastMessageAt: new Date(now - 50 * 60_000),
+    },
+  });
+  await prisma.message.createMany({
+    data: [
+      {
+        conversationId: whatsappConv.id,
+        direction: 'INBOUND',
+        body: 'Hola, quiero reservar una mesa para dos el viernes a las 8pm.',
+        sentAt: new Date(now - 60 * 60_000),
+      },
+      {
+        conversationId: whatsappConv.id,
+        direction: 'OUTBOUND',
+        body: '¡Hola María! Claro, le apartamos la mesa M1 para el viernes 20:00. ¿Le confirmo por este medio?',
+        sentAt: new Date(now - 50 * 60_000),
+      },
+    ],
+  });
+
+  const smsConv = await prisma.conversation.create({
+    data: {
+      tenantId: tenant.id,
+      restaurantId: restaurant.id,
+      guestId: lucia.id,
+      channel: 'SMS',
+      channelAddress: restaurant.twilioPhoneNumber!,
+      peerAddress: lucia.phone,
+      unread: 1,
+      lastMessageAt: new Date(now - 5 * 60_000),
+    },
+  });
+  await prisma.message.create({
+    data: {
+      conversationId: smsConv.id,
+      direction: 'INBOUND',
+      body: '¿Tienen mesa para 4 el sábado al mediodía?',
+      sentAt: new Date(now - 5 * 60_000),
+    },
+  });
+
   console.log('Seed completado:');
   console.log(`  Tenant:   ${tenant.slug} (${tenant.id})`);
   console.log(`  Restaurante: ${restaurant.name} (${restaurant.id})`);
@@ -164,6 +228,7 @@ async function main() {
   console.log(`  Horarios: ${openingData.length} filas`);
   console.log(`  Comensales: ${guestsData.length}`);
   console.log(`  Reservas: ${reservationData.length}`);
+  console.log(`  Conversaciones demo: 2 (WhatsApp, SMS)`);
 }
 
 main()

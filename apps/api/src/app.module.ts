@@ -10,6 +10,9 @@ import { RestaurantsModule } from './restaurants/restaurants.module';
 import { TablesModule } from './tables/tables.module';
 import { GuestsModule } from './guests/guests.module';
 import { ReservationsModule } from './reservations/reservations.module';
+import { ChannelsModule } from './channels/channels.module';
+import { RemindersModule } from './reminders/reminders.module';
+import { IntegrationsModule } from './integrations/integrations.module';
 
 @Module({
   imports: [
@@ -27,6 +30,7 @@ import { ReservationsModule } from './reservations/reservations.module';
       }),
     }),
     BullModule.registerQueue({ name: 'reminders' }),
+    BullModule.registerQueue({ name: 'calendar-sync' }),
 
     PrismaModule,
     HealthModule,
@@ -35,6 +39,12 @@ import { ReservationsModule } from './reservations/reservations.module';
     TablesModule,
     GuestsModule,
     ReservationsModule,
+    // Fase 2 — Canales: webhooks Twilio (SMS/WhatsApp/voz) y panel de conversaciones.
+    ChannelsModule,
+    // Fase 3 — Automatización: recordatorios y no-shows (cola BullMQ 'reminders').
+    RemindersModule,
+    // Fase 4 — Integraciones: Google Calendar 2-way sync (cola 'calendar-sync').
+    IntegrationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

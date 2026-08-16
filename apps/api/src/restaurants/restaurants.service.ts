@@ -60,6 +60,9 @@ export class RestaurantsService {
         name: dto.name,
         timezone: dto.timezone,
         defaultDurationMinutes: dto.defaultDurationMinutes,
+        reminderHoursBefore: dto.reminderHoursBefore,
+        phone: dto.phone,
+        twilioPhoneNumber: dto.twilioPhoneNumber,
       },
     });
   }

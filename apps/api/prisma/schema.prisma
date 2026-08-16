@@ -21,9 +21,11 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  restaurants Restaurant[]
-  guests      Guest[]
-  reservations Reservation[]
+  restaurants   Restaurant[]
+  guests        Guest[]
+  reservations  Reservation[]
+  conversations Conversation[]
+  integrations  Integration[]
 
   @@map("tenants")
 }
@@ -38,12 +40,29 @@ model Restaurant {
   timezone               String   @default("America/Guayaquil")
   defaultDurationMinutes Int      @default(90)
 
+  /// Teléfono real del restaurante (para reenvío de llamadas en el IVR).
+  phone String?
+
+  /// Número Twilio asignado al restaurante (destino de SMS/WhatsApp/llamadas).
+  /// Los webhooks de Twilio se resuelven contra este campo.
+  twilioPhoneNumber String?   @unique
+
+  /// Cuántas horas antes de la reserva se envía el recordatorio (Fase 3).
+  reminderHoursBefore Int      @default(2)
+
+  /// Canal del recordatorio automático (Fase 3): PHONE = llamada IVR,
+  /// SMS/WHATSAPP = mensaje. Las reservas originadas por teléfono siempre
+  /// reciben recordatorio por llamada.
+  reminderChannel Channel @default(WHATSAPP)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tables       Table[]
-  reservations Reservation[]
-  openingHours OpeningHour[]
+  tables        Table[]
+  reservations  Reservation[]
+  openingHours  OpeningHour[]
+  conversations Conversation[]
+  integrations  Integration[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -103,7 +122,8 @@ model Guest {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  reservations Reservation[]
+  reservations  Reservation[]
+  conversations Conversation[]
 
   @@unique([tenantId, phone])
   @@index([tenantId])
@@ -133,6 +153,9 @@ model Reservation {
   cancelledAt DateTime?
   completedAt DateTime?
 
+  /// Cuándo se envió el recordatorio (Fase 3). Evita envíos duplicados.
+  reminderSentAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -157,4 +180,143 @@ enum Channel {
   SMS
   WHATSAPP
   WEB
+}
+
+/// Estado de un hilo de conversación con un cliente.
+enum ConversationStatus {
+  OPEN
+  ARCHIVED
+}
+
+/// Dirección de un mensaje dentro de una conversación.
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+/// Estado de entrega de un mensaje saliente (reportado por el proveedor).
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+/// Hilo de interacción por canal con un cliente (Fase 2 — Canales).
+/// Un cliente + canal + número del restaurante = una conversación.
+model Conversation {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  guestId      String?
+  guest        Guest?   @relation(fields: [guestId], references: [id], onDelete: SetNull)
+
+  channel Channel
+
+  /// Número del restaurante en el canal (ej. +593999999999 o whatsapp:+...).
+  channelAddress String
+  /// Número del cliente en el canal.
+  peerAddress    String
+
+  /// Identificador del hilo en el proveedor (WhatsApp conversation SID).
+  providerThreadId String?
+
+  status ConversationStatus @default(OPEN)
+
+  /// Mensajes entrantes sin leer (contador para el panel).
+  unread Int @default(0)
+
+  lastMessageAt DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  messages Message[]
+
+  @@unique([restaurantId, channel, channelAddress, peerAddress])
+  @@index([tenantId])
+  @@index([restaurantId, lastMessageAt])
+  @@map("conversations")
+}
+
+/// Mensaje dentro de una conversación.
+model Message {
+  id             String           @id @default(cuid())
+  conversationId String
+  conversation   Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  direction MessageDirection
+  body      String
+  mediaUrl  String?
+
+  /// Identificador del mensaje/llamada en el proveedor (Twilio MessageSid/CallSid).
+  /// Único: Twilio reintenta webhooks y este campo da idempotencia.
+  providerSid String?
+  status      MessageStatus @default(SENT)
+  sentAt      DateTime      @default(now())
+
+  @@unique([providerSid])
+  @@index([conversationId, sentAt])
+  @@map("messages")
+}
+
+/// Proveedor externo integrado (Fase 4 — Integraciones).
+enum IntegrationProvider {
+  GOOGLE_CALENDAR
+  CALDAV
+  CRM_HUBSPOT
+}
+
+/// Estado de una integración con un proveedor externo.
+enum IntegrationStatus {
+  DISCONNECTED
+  CONNECTED
+  ERROR
+}
+
+/// Integración externa de un restaurante (Fase 4 — Integraciones).
+/// Guarda las credenciales OAuth del proveedor en `credentials` (JSON) y la
+/// configuración (calendarId, etc.) en `config`. Las credenciales NUNCA se
+/// exponen por la API REST.
+model Integration {
+  id           String              @id @default(cuid())
+  tenantId     String
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  restaurantId String
+  restaurant   Restaurant          @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  provider IntegrationProvider
+  status   IntegrationStatus      @default(DISCONNECTED)
+
+  /// Tokens/credenciales del proveedor (JSON privado, no exponer).
+  credentials Json?
+  /// Configuración del usuario (ej. { calendarId: "primary" }).
+  config Json?
+
+  lastSyncedAt DateTime?
+  lastError    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([restaurantId, provider])
+  @@index([tenantId])
+  @@map("integrations")
+}
+
+/// Registro persistido de eventos de dominio (patrón outbox, Fase 3).
+/// El bus sigue emitiendo en memoria; este registro garantiza trazabilidad y
+/// permite reprocesar eventos sin perderlos si el proceso se reinicia.
+model OutboxEvent {
+  id          String   @id @default(cuid())
+  name        String
+  tenantId    String
+  payload     Json
+  status      String   @default("PENDING") // PENDING | PROCESSED
+  createdAt   DateTime @default(now())
+  processedAt DateTime?
+
+  @@index([status, createdAt])
+  @@map("outbox_events")
 }
