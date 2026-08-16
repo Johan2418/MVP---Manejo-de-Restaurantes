@@ -1,0 +1,39 @@
+# Infraestructura de desarrollo: PostgreSQL + Redis
+# Uso: docker compose up -d   (ver scripts en package.json raíz)
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: reservas-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: reservas
+      POSTGRES_PASSWORD: reservas
+      POSTGRES_DB: reservas
+    # Puerto 5433: el 5432 suele estar ocupado por un PostgreSQL local
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reservas -d reservas"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: reservas-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:

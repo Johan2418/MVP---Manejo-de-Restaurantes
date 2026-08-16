@@ -1,0 +1,45 @@
+// Esquema Prisma — Fase 0 (fundación multi-tenant).
+// Fase 1: se añadirán Reservation, Table, Guest, Conversation, TimeSlot...
+//
+// Convención multi-tenant:
+// - Todo modelo de datos de negocio tiene un campo tenantId con índice.
+// - Tenant agrupa uno o varios Restaurant (marcas con varias ubicaciones).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Cliente del SaaS (un restaurante o grupo de restaurantes).
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  restaurants Restaurant[]
+
+  @@map("tenants")
+}
+
+/// Establecimiento (ubicación) dentro de un tenant.
+model Restaurant {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name     String
+  timezone String   @default("America/Guayaquil")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("restaurants")
+}

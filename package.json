@@ -1,0 +1,24 @@
+{
+  "name": "restaurant-reservas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema SaaS multi-tenant de automatización de reservas para restaurantes",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev --workspace api",
+    "dev:web": "npm run dev --workspace web",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "npm run prisma:migrate --workspace api",
+    "db:generate": "npm run prisma:generate --workspace api",
+    "db:studio": "npm run prisma:studio --workspace api"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
